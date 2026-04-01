@@ -27,6 +27,14 @@ def get_db():
         yield db
     finally:
         db.close()
+        
+        
+        from fastapi import FastAPI
+
+
+@app.get("/")
+def home():
+    return {"message": "working 🚀"}
 
 # ----------------------
 # Login API
