@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, Date,ForeignKey
-
+from sqlalchemy import Column, Integer, String, Date, ForeignKey
+from datetime import datetime, timezone
 from database import Base
+
 
 class User(Base):
     __tablename__ = "users"
@@ -10,8 +11,8 @@ class User(Base):
     name = Column(String(50))
     password = Column(String(255))
     flag = Column(Integer)
-    joined_date = Column(Date)
-    
+    joined_date = Column(Date, default=datetime.now(timezone.utc).date())
+
 
 class Roommate(Base):
     __tablename__ = "roommates"
@@ -20,7 +21,6 @@ class Roommate(Base):
     name = Column(String(50))
     role = Column(String(50))
     joined_date = Column(String(20))
-    
 
 
 class Item(Base):
