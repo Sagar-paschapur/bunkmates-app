@@ -56,7 +56,6 @@ python-jose==3.5.0
 python-multipart==0.0.22
 PyYAML==6.0.3
 # Editable install with no version control (realesrgan==0.3.0)
--e c:\users\user\appdata\local\programs\python\python310\lib\site-packages
 requests==2.32.5
 rsa==4.9.1
 scikit-image==0.25.2
