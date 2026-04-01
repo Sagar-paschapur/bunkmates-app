@@ -4,3 +4,4 @@ gunicorn
 sqlalchemy
 pymysql
 passlib[bcrypt]
+python-jose[cryptography]
