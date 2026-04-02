@@ -5,9 +5,6 @@ import models, schemas, database, auth
 from datetime import date, datetime, timezone
 from sqlalchemy import extract
 
-from database import engine, Base
-import models
-
 # ✅ Create app ONLY ONCE
 app = FastAPI()
 
@@ -33,13 +30,14 @@ def get_db():
         db.close()
         
         
+# from database import engine, Base
+# import models
 
-
-@app.get("/reset-db")
-def reset_db():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    return {"message": "Database reset successful"}
+# @app.get("/reset-db")
+# def reset_db():
+#     Base.metadata.drop_all(bind=engine)
+#     Base.metadata.create_all(bind=engine)
+#     return {"message": "Database reset successful"}
 
 
 @app.get("/db_init")
@@ -129,7 +127,6 @@ def get_dashboard(db: Session = Depends(get_db)):
 
     # ✅ Roommates
     roommate_list = [{"id": r.id, "name": r.name} for r in roommates]
-
     roommates_count = len(roommate_list)
 
     # ✅ Monthly total
@@ -137,7 +134,8 @@ def get_dashboard(db: Session = Depends(get_db)):
     monthly_total = 0
 
     for item in items:
-        item_date = datetime.strptime(item.date, "%Y-%m-%d")
+        item_date = item.date   # ✅ FIXED
+
         if item_date.month == now.month and item_date.year == now.year:
             monthly_total += item.amount
 
@@ -149,7 +147,11 @@ def get_dashboard(db: Session = Depends(get_db)):
     split = [{"name": r["name"], "amount": per_head} for r in roommate_list]
 
     # ✅ Recent Activity (latest 5)
-    sorted_items = sorted(items, key=lambda x: f"{x.date} {x.time}", reverse=True)
+    sorted_items = sorted(
+        items,
+        key=lambda x: (x.date, x.time if x.time else 0),  # ✅ FIXED sorting
+        reverse=True
+    )
 
     recent = []
     for item in sorted_items[:5]:
@@ -161,7 +163,7 @@ def get_dashboard(db: Session = Depends(get_db)):
 
         recent.append(
             {
-                "person": roommate.name,
+                "person": roommate.name if roommate else "Unknown",
                 "description": item.name,
                 "amount": item.amount,
                 "date": item.date,
@@ -176,7 +178,6 @@ def get_dashboard(db: Session = Depends(get_db)):
         "split": split,
         "recent_activity": recent,
     }
-
 
 @app.post("/addroommates")
 def add_roommate(roommate: schemas.RoommateCreate, db: Session = Depends(get_db)):
