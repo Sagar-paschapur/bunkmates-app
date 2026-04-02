@@ -5,6 +5,9 @@ import models, schemas, database, auth
 from datetime import date, datetime, timezone
 from sqlalchemy import extract
 
+from database import engine, Base
+import models
+
 # ✅ Create app ONLY ONCE
 app = FastAPI()
 
@@ -28,6 +31,15 @@ def get_db():
         yield db
     finally:
         db.close()
+        
+        
+
+
+@app.get("/reset-db")
+def reset_db():
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    return {"message": "Database reset successful"}
 
 
 @app.get("/db_init")

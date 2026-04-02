@@ -20,9 +20,9 @@ class Roommate(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(50))
     role = Column(String(50))
-    joined_date = Column(String(20))
+    joined_date = Column(Date, default=date.today)
 
-
+    
 class Item(Base):
     __tablename__ = "items"
 
@@ -31,5 +31,7 @@ class Item(Base):
     name = Column(String(100))
     amount = Column(Integer)
     date = Column(Date, default=date.today)   # ✅ FIXED
-    time = Column(Time, default=datetime.utcnow) 
+    time = Column(Time, default=lambda: datetime.utcnow().time())  # ✅ FIXED
     note = Column(String(200))
+
+
