@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Date, ForeignKey, Time
-from datetime import datetime, timezone
+from datetime import datetime, timezone,date
 from database import Base
 
 
@@ -30,6 +30,6 @@ class Item(Base):
     roommate_id = Column(Integer, ForeignKey("roommates.id"))
     name = Column(String(100))
     amount = Column(Integer)
-    date = Column(Date, default=datetime.utcnow)
-    time = Column(Time, default=datetime.utcnow)
+    date = Column(Date, default=date.today)   # ✅ FIXED
+    time = Column(Time, default=datetime.utcnow) 
     note = Column(String(200))
