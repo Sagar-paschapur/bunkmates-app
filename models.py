@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, ForeignKey
+from sqlalchemy import Column, Integer, String, Date, ForeignKey, Time
 from datetime import datetime, timezone
 from database import Base
 
@@ -30,6 +30,6 @@ class Item(Base):
     roommate_id = Column(Integer, ForeignKey("roommates.id"))
     name = Column(String(100))
     amount = Column(Integer)
-    date = Column(String(20))
-    time = Column(String(20))
+    date = Column(Date, default=datetime.utcnow)
+    time = Column(Time, default=datetime.utcnow)
     note = Column(String(200))
