@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, Date, ForeignKey, Time
 from datetime import datetime, timezone,date
 from database import Base
+import pytz
+IST = pytz.timezone('Asia/Kolkata')
 
 
 class User(Base):
@@ -31,7 +33,7 @@ class Item(Base):
     name = Column(String(100))
     amount = Column(Integer)
     date = Column(Date, default=date.today)   # ✅ FIXED
-    time = Column(Time, default=lambda: datetime.now().time())
+    time = Column(Time, default=lambda: datetime.now(IST).time())
     note = Column(String(200))
 
 
