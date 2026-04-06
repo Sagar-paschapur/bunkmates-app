@@ -1,8 +1,9 @@
 from sqlalchemy import Column, Integer, String, Date, ForeignKey, Time
-from datetime import datetime, timezone,date
+from datetime import datetime, timezone, date,timedelta
 from database import Base
 import pytz
-IST = pytz.timezone('Asia/Kolkata')
+
+# IST = pytz.timezone("Asia/Kolkata")
 
 
 class User(Base):
@@ -24,7 +25,7 @@ class Roommate(Base):
     role = Column(String(50))
     joined_date = Column(Date, default=date.today)
 
-    
+
 class Item(Base):
     __tablename__ = "items"
 
@@ -32,8 +33,10 @@ class Item(Base):
     roommate_id = Column(Integer, ForeignKey("roommates.id"))
     name = Column(String(100))
     amount = Column(Integer)
-    date = Column(Date, default=date.today)   # ✅ FIXED
-    time = Column(Time, default=lambda: datetime.now(IST).time())
+    date = Column(Date, default=date.today)  # ✅ FIXED
+    # time = Column(Time, default=lambda: datetime.now(IST).time())
+    time = Column(
+        Time,
+        default=lambda: (datetime.utcnow() + timedelta(hours=5, minutes=30)).time(),
+    )
     note = Column(String(200))
-
-
