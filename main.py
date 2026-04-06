@@ -254,7 +254,7 @@ def add_item(item: schemas.ItemCreate, db: Session = Depends(get_db)):
         amount=item.amount,
         note=item.note,
         date=now.strftime("%Y-%m-%d"),
-        time=now.strftime("%I:%M %p"),
+        # time=now.strftime("%I:%M %p"),
     )
 
     db.add(new_item)
