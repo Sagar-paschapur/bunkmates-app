@@ -31,7 +31,7 @@ class Item(Base):
     name = Column(String(100))
     amount = Column(Integer)
     date = Column(Date, default=date.today)   # ✅ FIXED
-    time = Column(Time, default=lambda: datetime.utcnow().time())  # ✅ FIXED
+    time = Column(Time, default=lambda: datetime.now().time())
     note = Column(String(200))
 
 

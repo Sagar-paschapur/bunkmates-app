@@ -149,7 +149,7 @@ def get_dashboard(db: Session = Depends(get_db)):
     # ✅ Recent Activity (latest 5)
     sorted_items = sorted(
         items,
-        key=lambda x: (x.date, x.time if x.time else 0),  # ✅ FIXED sorting
+        key=lambda x: (x.date, x.time if x.time else 0),
         reverse=True
     )
 
