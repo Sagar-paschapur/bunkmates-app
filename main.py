@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import models, schemas, database, auth
 from datetime import date, datetime, timezone
 from sqlalchemy import extract
+from fastapi import Query
 
 # ✅ Create app ONLY ONCE
 app = FastAPI()
@@ -319,3 +320,61 @@ def get_history(month: str, db: Session = Depends(get_db)):
     total = sum(i["amount"] for i in result)
 
     return {"total": total, "transactions": result}
+
+
+
+
+@app.get("/reports")
+def get_reports(
+    month: str = Query(None, description="Format: YYYY-MM"),
+    db: Session = Depends(get_db)
+):
+    # ✅ Default to current month
+    if not month:
+        now = datetime.now()
+        year = now.year
+        month_num = now.month
+        month = f"{year}-{str(month_num).zfill(2)}"
+    else:
+        year, month_num = map(int, month.split("-"))
+
+    # ✅ Get roommates
+    roommates = db.query(models.Roommate).all()
+
+    # ✅ Get items for selected month
+    items = (
+        db.query(models.Item)
+        .filter(
+            extract("year", models.Item.date) == year,
+            extract("month", models.Item.date) == month_num,
+        )
+        .all()
+    )
+
+    # ✅ Total
+    total_amount = sum(item.amount for item in items)
+
+    count = len(roommates)
+    per_head = round(total_amount / count) if count > 0 else 0
+
+    report = []
+
+    for r in roommates:
+        spent = sum(item.amount for item in items if item.roommate_id == r.id)
+        balance = spent - per_head
+
+        report.append({
+            "roommate_id": r.id,
+            "name": r.name,
+            "spent": spent,
+            "split": per_head,
+            "balance": balance
+        })
+
+    return {
+        "month": month,
+        "total": total_amount,
+        "per_head": per_head,
+        "roommates_count": count,
+        "report": report
+    }
