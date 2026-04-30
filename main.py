@@ -6,6 +6,8 @@ from datetime import date, datetime, timezone
 from sqlalchemy import extract
 from fastapi import Query
 
+from sqlalchemy import func
+
 # ✅ Create app ONLY ONCE
 app = FastAPI()
 
@@ -18,8 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ✅ Create tables
-models.Base.metadata.create_all(bind=database.engine)
+# models.Base.metadata.create_all(bind=database.engine)
 
 
 # Dependency
@@ -29,8 +30,8 @@ def get_db():
         yield db
     finally:
         db.close()
-        
-        
+
+
 # from database import engine, Base
 # import models
 
@@ -95,9 +96,6 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     }
 
 
-# ----------------------
-# Login API
-# ----------------------
 @app.post("/login")
 def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
 
@@ -120,6 +118,55 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
     }
 
 
+# @app.get("/dashboard")
+# def get_dashboard(db: Session = Depends(get_db)):
+
+#     now = datetime.now()
+
+#     # ✅ Get roommates
+#     roommates = db.query(models.Roommate).all()
+#     roommate_list = [{"id": r.id, "name": r.name} for r in roommates]
+#     roommates_count = len(roommate_list)
+
+#     # ✅ Get ONLY current month items (IMPORTANT)
+#     items = db.query(models.Item).filter(
+#         extract("month", models.Item.date) == now.month,
+#         extract("year", models.Item.date) == now.year
+#     ).all()
+
+#     # ✅ Monthly total (FAST)
+#     monthly_total = sum(item.amount for item in items)
+
+#     # ✅ Split
+#     per_head = round(monthly_total / roommates_count) if roommates_count else 0
+#     split = [{"name": r["name"], "amount": per_head} for r in roommate_list]
+
+#     # ✅ Recent activity (NO extra queries)
+#     recent = []
+
+#     # preload roommates in dict (IMPORTANT)
+#     roommate_map = {r.id: r.name for r in roommates}
+
+#     sorted_items = sorted(items, key=lambda x: (x.date, x.time), reverse=True)
+
+#     for item in sorted_items[:5]:
+#         recent.append({
+#             "person": roommate_map.get(item.roommate_id, "Unknown"),
+#             "description": item.name,
+#             "amount": item.amount,
+#             "date": item.date,
+#         })
+
+#     return {
+#         "user_name": "jaggu",
+#         "roommates": roommate_list,
+#         "roommates_count": roommates_count,
+#         "monthly_total": monthly_total,
+#         "split": split,
+#         "recent_activity": recent,
+#     }
+
+
 
 
 @app.get("/dashboard")
@@ -127,39 +174,52 @@ def get_dashboard(db: Session = Depends(get_db)):
 
     now = datetime.now()
 
+    # ✅ Month range (FAST instead of extract)
+    start = date(now.year, now.month, 1)
+
+    if now.month == 12:
+        end = date(now.year + 1, 1, 1)
+    else:
+        end = date(now.year, now.month + 1, 1)
+
     # ✅ Get roommates
     roommates = db.query(models.Roommate).all()
     roommate_list = [{"id": r.id, "name": r.name} for r in roommates]
-    roommates_count = len(roommate_list)
+    roommates_count = len(roommates)
 
-    # ✅ Get ONLY current month items (IMPORTANT)
-    items = db.query(models.Item).filter(
-        extract("month", models.Item.date) == now.month,
-        extract("year", models.Item.date) == now.year
-    ).all()
+    # ✅ Monthly total (DB calculation, not Python loop)
+    monthly_total = (
+        db.query(func.sum(models.Item.amount))
+        .filter(models.Item.date >= start, models.Item.date < end)
+        .scalar()
+        or 0
+    )
 
-    # ✅ Monthly total (FAST)
-    monthly_total = sum(item.amount for item in items)
-
-    # ✅ Split
+    # ✅ Split calculation
     per_head = round(monthly_total / roommates_count) if roommates_count else 0
     split = [{"name": r["name"], "amount": per_head} for r in roommate_list]
 
-    # ✅ Recent activity (NO extra queries)
-    recent = []
+    # ✅ Get recent activity directly from DB (NO Python sorting)
+    recent_items = (
+        db.query(models.Item)
+        .filter(models.Item.date >= start, models.Item.date < end)
+        .order_by(models.Item.date.desc(), models.Item.time.desc())
+        .limit(5)
+        .all()
+    )
 
-    # preload roommates in dict (IMPORTANT)
+    # ✅ Map roommates (avoid extra DB queries)
     roommate_map = {r.id: r.name for r in roommates}
 
-    sorted_items = sorted(items, key=lambda x: (x.date, x.time), reverse=True)
-
-    for item in sorted_items[:5]:
-        recent.append({
+    recent = [
+        {
             "person": roommate_map.get(item.roommate_id, "Unknown"),
             "description": item.name,
             "amount": item.amount,
             "date": item.date,
-        })
+        }
+        for item in recent_items
+    ]
 
     return {
         "user_name": "jaggu",
@@ -170,65 +230,6 @@ def get_dashboard(db: Session = Depends(get_db)):
         "recent_activity": recent,
     }
 
-# @app.get("/dashboard")
-# def get_dashboard(db: Session = Depends(get_db)):
-
-#     roommates = db.query(models.Roommate).all()
-#     items = db.query(models.Item).all()
-
-#     # ✅ Roommates
-#     roommate_list = [{"id": r.id, "name": r.name} for r in roommates]
-#     roommates_count = len(roommate_list)
-
-#     # ✅ Monthly total
-#     now = datetime.now()
-#     monthly_total = 0
-
-#     for item in items:
-#         item_date = item.date   # ✅ FIXED
-
-#         if item_date.month == now.month and item_date.year == now.year:
-#             monthly_total += item.amount
-
-#     # ✅ Split per person
-#     per_head = 0
-#     if roommates_count > 0:
-#         per_head = round(monthly_total / roommates_count)
-
-#     split = [{"name": r["name"], "amount": per_head} for r in roommate_list]
-
-#     # ✅ Recent Activity (latest 5)
-#     sorted_items = sorted(
-#         items,
-#         key=lambda x: (x.date, x.time if x.time else 0),
-#         reverse=True
-#     )
-
-#     recent = []
-#     for item in sorted_items[:5]:
-#         roommate = (
-#             db.query(models.Roommate)
-#             .filter(models.Roommate.id == item.roommate_id)
-#             .first()
-#         )
-
-#         recent.append(
-#             {
-#                 "person": roommate.name if roommate else "Unknown",
-#                 "description": item.name,
-#                 "amount": item.amount,
-#                 "date": item.date,
-#             }
-#         )
-
-#     return {
-#         "user_name": "jaggu",
-#         "roommates": roommate_list,
-#         "roommates_count": roommates_count,
-#         "monthly_total": monthly_total,
-#         "split": split,
-#         "recent_activity": recent,
-#     }
 
 @app.post("/addroommates")
 def add_roommate(roommate: schemas.RoommateCreate, db: Session = Depends(get_db)):
@@ -372,12 +373,10 @@ def get_history(month: str, db: Session = Depends(get_db)):
     return {"total": total, "transactions": result}
 
 
-
-
 @app.get("/reports")
 def get_reports(
     month: str = Query(None, description="Format: YYYY-MM"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     # ✅ Default to current month
     if not month:
@@ -413,18 +412,20 @@ def get_reports(
         spent = sum(item.amount for item in items if item.roommate_id == r.id)
         balance = spent - per_head
 
-        report.append({
-            "roommate_id": r.id,
-            "name": r.name,
-            "spent": spent,
-            "split": per_head,
-            "balance": balance
-        })
+        report.append(
+            {
+                "roommate_id": r.id,
+                "name": r.name,
+                "spent": spent,
+                "split": per_head,
+                "balance": balance,
+            }
+        )
 
     return {
         "month": month,
         "total": total_amount,
         "per_head": per_head,
         "roommates_count": count,
-        "report": report
+        "report": report,
     }
