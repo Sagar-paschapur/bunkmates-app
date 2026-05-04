@@ -24,7 +24,10 @@ app.add_middleware(
 # models.Base.metadata.create_all(bind=database.engine)
 
 
-models.Base.metadata.create_all(bind=engine)
+@app.on_event("startup")
+def on_startup():
+    import models
+    models.Base.metadata.create_all(bind=engine)
 
 
 # Dependency
