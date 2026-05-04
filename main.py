@@ -7,6 +7,7 @@ from sqlalchemy import extract
 from fastapi import Query
 
 from sqlalchemy import func
+from database import engine
 
 # ✅ Create app ONLY ONCE
 app = FastAPI()
@@ -21,6 +22,9 @@ app.add_middleware(
 )
 
 # models.Base.metadata.create_all(bind=database.engine)
+
+
+models.Base.metadata.create_all(bind=engine)
 
 
 # Dependency
