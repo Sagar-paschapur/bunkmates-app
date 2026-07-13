@@ -312,7 +312,7 @@ def get_items(roommate_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
-    return items
+    return items  
 
 
 @app.post("/items")
