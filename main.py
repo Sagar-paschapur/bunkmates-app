@@ -294,12 +294,25 @@ def get_roommate(id: int, db: Session = Depends(get_db)):
 @app.get("/items/roommate/{roommate_id}")
 def get_items(roommate_id: int, db: Session = Depends(get_db)):
 
-    items = db.query(models.Item).filter(models.Item.roommate_id == roommate_id).all()
+    now = datetime.now()
+    start = date(now.year, now.month, 1)
+
+    if now.month == 12:
+        end = date(now.year + 1, 1, 1)
+    else:
+        end = date(now.year, now.month + 1, 1)
+
+    items = (
+        db.query(models.Item)
+        .filter(
+            models.Item.roommate_id == roommate_id,
+            models.Item.date >= start,
+            models.Item.date < end,
+        )
+        .all()
+    )
 
     return items
-
-
-from datetime import datetime
 
 
 @app.post("/items")
