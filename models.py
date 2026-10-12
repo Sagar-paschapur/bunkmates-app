@@ -1,7 +1,10 @@
-from sqlalchemy import Column, Integer, String, Date, ForeignKey, Time
-from datetime import datetime, timezone, date,timedelta
+from datetime import datetime, timezone, date, timedelta
+
+from sqlalchemy import Column, Date, ForeignKey, Integer, String, Time
+
 from database import Base
-import pytz
+
+LOCAL_TZ = timezone(timedelta(hours=5, minutes=30))
 
 # IST = pytz.timezone("Asia/Kolkata")
 
@@ -14,7 +17,7 @@ class User(Base):
     name = Column(String(50))
     password = Column(String(255))
     flag = Column(Integer)
-    joined_date = Column(Date, default=datetime.now(timezone.utc).date())
+    joined_date = Column(Date, default=lambda: datetime.now(LOCAL_TZ).date())
 
 
 class Roommate(Base):
@@ -23,7 +26,8 @@ class Roommate(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(50))
     role = Column(String(50))
-    joined_date = Column(Date, default=date.today)
+    joined_date = Column(Date, default=lambda: datetime.now(LOCAL_TZ).date())
+    left_date = Column(Date, nullable=True)
 
 
 class Item(Base):
@@ -33,7 +37,7 @@ class Item(Base):
     roommate_id = Column(Integer, ForeignKey("roommates.id"))
     name = Column(String(100))
     amount = Column(Integer)
-    date = Column(Date, default=date.today)  # ✅ FIXED
+    date = Column(Date, default=lambda: datetime.now(timezone.utc).date())
     # time = Column(Time, default=lambda: datetime.now(IST).time())
     time = Column(
         Time,

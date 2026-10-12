@@ -4,15 +4,12 @@ import os
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# 🔴 Safety check
 if not DATABASE_URL:
-    raise ValueError("DATABASE_URL is not set in environment variables")
-
-print("DATABASE_URL:", DATABASE_URL)
+    DATABASE_URL = "sqlite:///./bunkmates.db"
 
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"sslmode": "require"}
+    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {"sslmode": "require"},
 )
 
 SessionLocal = sessionmaker(

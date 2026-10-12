@@ -1,15 +1,18 @@
-from fastapi import FastAPI, Depends, HTTPException, Request
-from sqlalchemy.orm import Session
-from fastapi.middleware.cors import CORSMiddleware
-import models, schemas, database, auth
-from datetime import date, datetime, timezone
-from sqlalchemy import extract
-from fastapi import Query
+from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import func
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import extract, func, or_
+from sqlalchemy.orm import Session
+
+import auth
+import database
+import models
+import schemas
 from database import engine
 
-# ✅ Create app ONLY ONCE
+LOCAL_TZ = timezone(timedelta(hours=5, minutes=30))
+
 app = FastAPI()
 
 # ✅ CORS Middleware
@@ -21,16 +24,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# models.Base.metadata.create_all(bind=database.engine)
-
-
 @app.on_event("startup")
 def on_startup():
-    import models
     models.Base.metadata.create_all(bind=engine)
 
 
-# Dependency
 def get_db():
     db = database.SessionLocal()
     try:
@@ -39,39 +37,11 @@ def get_db():
         db.close()
 
 
-# from database import engine, Base
-# import models
-
-# @app.get("/reset-db")
-# def reset_db():
-#     Base.metadata.drop_all(bind=engine)
-#     Base.metadata.create_all(bind=engine)
-#     return {"message": "Database reset successful"}
-
-
-@app.get("/db_init")
-def init_db(db: Session = Depends(get_db)):
-
-    # ✅ Create tables
-    models.Base.metadata.create_all(bind=database.engine)
-
-    create_user = models.User(
-        phone="8722053941",
-        name="sagar",
-        password=auth.hash_password("password123"),
-        flag=1,
-        joined_date=datetime.now(timezone.utc).date(),
-    )
-
-    db.add(create_user)
-    db.commit()
-    db.refresh(create_user)
-
-    return {"message": "Database initialized successfully"}
+db_session = Depends(get_db)
 
 
 @app.post("/register")
-def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
+def register(user: schemas.UserCreate, db: Session = db_session):
 
     # Check if user already exists
     existing_user = (
@@ -90,7 +60,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
         name=user.name,
         password=hashed_password,
         flag=user.flag,
-        joined_date=date.today(),
+        joined_date=datetime.now(LOCAL_TZ).date(),
     )
 
     db.add(new_user)
@@ -104,7 +74,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
 
 @app.post("/login")
-def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
+def login(user: schemas.UserLogin, db: Session = db_session):
 
     db_user = db.query(models.User).filter(models.User.phone == user.phone).first()
 
@@ -123,30 +93,6 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
         "flag": db_user.flag,
         "joined_date": db_user.joined_date,
     }
-
-
-# @app.get("/dashboard")
-# def get_dashboard(db: Session = Depends(get_db)):
-
-#     now = datetime.now()
-
-#     # ✅ Get roommates
-#     roommates = db.query(models.Roommate).all()
-#     roommate_list = [{"id": r.id, "name": r.name} for r in roommates]
-#     roommates_count = len(roommate_list)
-
-#     # ✅ Get ONLY current month items (IMPORTANT)
-#     items = db.query(models.Item).filter(
-#         extract("month", models.Item.date) == now.month,
-#         extract("year", models.Item.date) == now.year
-#     ).all()
-
-#     # ✅ Monthly total (FAST)
-#     monthly_total = sum(item.amount for item in items)
-
-#     # ✅ Split
-#     per_head = round(monthly_total / roommates_count) if roommates_count else 0
-#     split = [{"name": r["name"], "amount": per_head} for r in roommate_list]
 
 #     # ✅ Recent activity (NO extra queries)
 #     recent = []
@@ -177,9 +123,9 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
 
 
 @app.get("/dashboard")
-def get_dashboard(db: Session = Depends(get_db)):
+def get_dashboard(db: Session = db_session):
 
-    now = datetime.now()
+    now = datetime.now(LOCAL_TZ)
 
     # ✅ Month range (FAST instead of extract)
     start = date(now.year, now.month, 1)
@@ -189,10 +135,11 @@ def get_dashboard(db: Session = Depends(get_db)):
     else:
         end = date(now.year, now.month + 1, 1)
 
-    # ✅ Get roommates
-    roommates = db.query(models.Roommate).all()
-    roommate_list = [{"id": r.id, "name": r.name} for r in roommates]
-    roommates_count = len(roommates)
+    # ✅ Load all roommates once and filter active in Python
+    roommate_rows = db.query(models.Roommate).all()
+    active_roommates = [r for r in roommate_rows if r.left_date is None]
+    roommate_list = [{"id": r.id, "name": r.name} for r in active_roommates]
+    roommates_count = len(active_roommates)
 
     # ✅ Monthly total (DB calculation, not Python loop)
     monthly_total = (
@@ -215,8 +162,8 @@ def get_dashboard(db: Session = Depends(get_db)):
         .all()
     )
 
-    # ✅ Map roommates (avoid extra DB queries)
-    roommate_map = {r.id: r.name for r in roommates}
+    # ✅ Map roommates from the single load
+    roommate_map = {r.id: r.name for r in roommate_rows}
 
     recent = [
         {
@@ -239,10 +186,10 @@ def get_dashboard(db: Session = Depends(get_db)):
 
 
 @app.post("/addroommates")
-def add_roommate(roommate: schemas.RoommateCreate, db: Session = Depends(get_db)):
+def add_roommate(roommate: schemas.RoommateCreate, db: Session = db_session):
 
     new_roommate = models.Roommate(
-        name=roommate.name, role=roommate.role, joined_date=str(date.today())
+        name=roommate.name, role=roommate.role, joined_date=datetime.now(LOCAL_TZ).date()
     )
 
     db.add(new_roommate)
@@ -253,8 +200,8 @@ def add_roommate(roommate: schemas.RoommateCreate, db: Session = Depends(get_db)
 
 
 @app.get("/roommates")
-def get_roommates(db: Session = Depends(get_db)):
-    roommates = db.query(models.Roommate).all()
+def get_roommates(db: Session = db_session):
+    roommates = db.query(models.Roommate).filter(models.Roommate.left_date == None).all()
 
     return [
         {"id": r.id, "name": r.name, "role": r.role, "joined_date": r.joined_date}
@@ -262,39 +209,59 @@ def get_roommates(db: Session = Depends(get_db)):
     ]
 
 
+@app.get("/roommates/all")
+def get_all_roommates(db: Session = db_session):
+    roommates = db.query(models.Roommate).all()
+
+    return [
+        {
+            "id": r.id,
+            "name": r.name,
+            "role": r.role,
+            "joined_date": r.joined_date,
+            "left_date": r.left_date,
+        }
+        for r in roommates
+    ]
+
+
 @app.delete("/deleteroommates/{id}")
-def delete_roommate(id: int, db: Session = Depends(get_db)):
+def delete_roommate(id: int, db: Session = db_session):
 
     roommate = db.query(models.Roommate).filter(models.Roommate.id == id).first()
 
     if not roommate:
         raise HTTPException(status_code=404, detail="Roommate not found")
 
-    # ✅ DELETE CHILD RECORDS FIRST
-    db.query(models.Item).filter(models.Item.roommate_id == id).delete()
+    if roommate.left_date is not None:
+        raise HTTPException(status_code=400, detail="Roommate already removed")
 
-    # ✅ THEN DELETE ROOMMATE
-    db.delete(roommate)
+    roommate.left_date = datetime.now(LOCAL_TZ).date()
     db.commit()
 
-    return {"message": "Roommate deleted successfully"}
+    return {"message": "Roommate marked as left successfully", "left_date": roommate.left_date}
 
 
 @app.get("/singleroommatedetails/{id}")
-def get_roommate(id: int, db: Session = Depends(get_db)):
+def get_roommate(id: int, db: Session = db_session):
 
     roommate = db.query(models.Roommate).filter(models.Roommate.id == id).first()
 
     if not roommate:
         raise HTTPException(status_code=404, detail="Roommate not found")
 
-    return {"id": roommate.id, "name": roommate.name, "joined": roommate.joined_date}
+    return {
+        "id": roommate.id,
+        "name": roommate.name,
+        "joined": roommate.joined_date,
+        "left_date": roommate.left_date,
+    }
 
 
 @app.get("/items/roommate/{roommate_id}")
-def get_items(roommate_id: int, db: Session = Depends(get_db)):
+def get_items(roommate_id: int, db: Session = db_session):
 
-    now = datetime.now()
+    now = datetime.now(LOCAL_TZ)
     start = date(now.year, now.month, 1)
 
     if now.month == 12:
@@ -316,17 +283,16 @@ def get_items(roommate_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/items")
-def add_item(item: schemas.ItemCreate, db: Session = Depends(get_db)):
+def add_item(item: schemas.ItemCreate, db: Session = db_session):
 
-    now = datetime.now()
+    now = datetime.now(LOCAL_TZ)
 
     new_item = models.Item(
         roommate_id=item.roommate_id,
         name=item.name,
         amount=item.amount,
         note=item.note,
-        date=now.strftime("%Y-%m-%d"),
-        # time=now.strftime("%I:%M %p"),
+        date=now.date(),
     )
 
     db.add(new_item)
@@ -337,7 +303,7 @@ def add_item(item: schemas.ItemCreate, db: Session = Depends(get_db)):
 
 
 @app.delete("/deleteitems/{item_id}")
-def delete_item(item_id: int, db: Session = Depends(get_db)):
+def delete_item(item_id: int, db: Session = db_session):
 
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
 
@@ -351,18 +317,18 @@ def delete_item(item_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/logout")
-def logout(request: Request):
-
+def logout():
     return {"message": "Logout successful"}
 
 
 @app.get("/history")
-def get_history(month: str, db: Session = Depends(get_db)):
+def get_history(month: str, db: Session = db_session):
 
     year, month_num = map(int, month.split("-"))
 
-    items = (
-        db.query(models.Item)
+    item_rows = (
+        db.query(models.Item, models.Roommate)
+        .outerjoin(models.Roommate, models.Roommate.id == models.Item.roommate_id)
         .filter(
             extract("year", models.Item.date) == year,
             extract("month", models.Item.date) == month_num,
@@ -370,23 +336,15 @@ def get_history(month: str, db: Session = Depends(get_db)):
         .all()
     )
 
-    result = []
-
-    for item in items:
-        roommate = (
-            db.query(models.Roommate)
-            .filter(models.Roommate.id == item.roommate_id)
-            .first()
-        )
-
-        result.append(
-            {
-                "person": roommate.name,
-                "description": item.name,
-                "amount": item.amount,
-                "date": item.date,
-            }
-        )
+    result = [
+        {
+            "person": roommate.name if roommate else "Unknown",
+            "description": item.name,
+            "amount": item.amount,
+            "date": item.date,
+        }
+        for item, roommate in item_rows
+    ]
 
     total = sum(i["amount"] for i in result)
 
@@ -396,19 +354,36 @@ def get_history(month: str, db: Session = Depends(get_db)):
 @app.get("/reports")
 def get_reports(
     month: str = Query(None, description="Format: YYYY-MM"),
-    db: Session = Depends(get_db),
+    db: Session = db_session,
 ):
     # ✅ Default to current month
     if not month:
-        now = datetime.now()
+        now = datetime.now(LOCAL_TZ)
         year = now.year
         month_num = now.month
         month = f"{year}-{str(month_num).zfill(2)}"
     else:
         year, month_num = map(int, month.split("-"))
 
-    # ✅ Get roommates
-    roommates = db.query(models.Roommate).all()
+    # ✅ Month range
+    start = date(year, month_num, 1)
+    if month_num == 12:
+        end = date(year + 1, 1, 1)
+    else:
+        end = date(year, month_num + 1, 1)
+
+    # ✅ Get roommates who were present during the requested month
+    roommates = (
+        db.query(models.Roommate)
+        .filter(
+            models.Roommate.joined_date < end,
+            or_(
+                models.Roommate.left_date == None,
+                models.Roommate.left_date >= start,
+            ),
+        )
+        .all()
+    )
 
     # ✅ Get items for selected month
     items = (
